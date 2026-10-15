@@ -1,7 +1,8 @@
 """Synthetic B-mode frames with known knob errors, so the pipeline can be exercised before the
 first capture exists. This is a physics cartoon, not a simulator: Rayleigh speckle, exponential
 attenuation, piecewise TGC, a lateral blur that widens away from the focus, one anechoic cyst at a
-fixed physical depth, log compression to 8 bits. Good enough to test that each detector moves the
+fixed physical depth, log compression to 8 bits. Optionally a curvilinear sector shape and static
+burned-in overlays, to test the valid-pixel mask. Good enough to test that each detector moves the
 right way; never a substitute for phantom data.
 """
 from __future__ import annotations
@@ -26,9 +27,31 @@ class SynthSettings:
     atten_db_per_cm_mhz: float = 0.5
     dynamic_range_db: float = 45.0
     floor_db: float = -34.0
+    sector: bool = False        # curvilinear fan with black corners
+    overlay: bool = False       # static depth ticks, focus caret, logo
 
 
 CORRECT = SynthSettings()
+
+
+def sector_mask(h: int = H, w: int = W, apex_above_px: float = 120.0, half_angle_deg: float = 32.0
+                ) -> np.ndarray:
+    """True inside a fan whose apex sits above the top edge, like a curvilinear probe."""
+    yy, xx = np.mgrid[0:h, 0:w]
+    dy, dx = yy + apex_above_px, xx - (w - 1) / 2
+    ang = np.degrees(np.arctan2(dx, dy))
+    r = np.hypot(dx, dy)
+    return (np.abs(ang) <= half_angle_deg) & (r <= h + apex_above_px - 4) & (r >= apex_above_px + 20)
+
+
+def overlay_mask(h: int = H, w: int = W) -> np.ndarray:
+    """True where a static overlay is drawn: depth ticks on the right, a focus caret, a logo box."""
+    m = np.zeros((h, w), bool)
+    for y in range(16, h, 32):
+        m[y:y + 2, w - 12:w - 2] = True  # depth ticks
+    m[h // 2 - 6:h // 2 + 6, w - 20:w - 14] = True  # focus caret
+    m[h - 24:h - 8, 8:60] = True  # logo box
+    return m
 
 
 def render(s: SynthSettings = CORRECT, seed: int = 0) -> np.ndarray:
@@ -61,7 +84,12 @@ def render(s: SynthSettings = CORRECT, seed: int = 0) -> np.ndarray:
     tgc = att + s.tgc_far_db * (z / s.depth_cm)
     db = 20 * np.log10(env + 1e-6) + (-att + tgc + s.gain_db)[:, None]
     disp = (db - s.floor_db) / s.dynamic_range_db * 255.0
-    return np.clip(disp, 0, 255).astype(np.uint8)
+    img = np.clip(disp, 0, 255).astype(np.uint8)
+    if s.sector:
+        img[~sector_mask()] = 0
+    if s.overlay:
+        img[overlay_mask()] = 230
+    return img
 
 
 # Sweep definitions: one knob at a time, every other knob correct.
@@ -77,5 +105,5 @@ SWEEPS: dict[str, dict] = {
 }
 
 
-def settings_for(control: str, level: float) -> SynthSettings:
-    return replace(CORRECT, **{SWEEPS[control]["field"]: float(level)})
+def settings_for(control: str, level: float, base: SynthSettings = CORRECT) -> SynthSettings:
+    return replace(base, **{SWEEPS[control]["field"]: float(level)})

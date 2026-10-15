@@ -29,13 +29,15 @@ def make_manifest(tmp_path, control, levels, frames=8):
 
 
 def test_gain_big_error_separable(tmp_path):
-    mp = make_manifest(tmp_path, "gain", [-12, 0, 12])
+    mp = make_manifest(tmp_path, "gain", [-12, 0, 12], frames=12)
     rows = benchmark.read_manifest(mp)
     rows = benchmark.featurize(rows, base_dir=str(tmp_path))
     (s,) = benchmark.run(rows, min_acc=0.9)
     assert s.control == "gain"
     assert s.smallest_separable_error == 12
     assert all(r.test_acc >= 0.9 for r in s.levels)
+    assert s.rule is not None and s.rule.smallest_separable_error == 12
+    assert s.rule.false_alarm <= 0.15
 
 
 def test_markdown_and_json_render(tmp_path):
@@ -45,5 +47,5 @@ def test_markdown_and_json_render(tmp_path):
     assert os.path.exists(tmp_path / "feat.json")
     summaries = benchmark.run(rows)
     md = benchmark.to_markdown(summaries, "t")
-    assert "| depth |" in md and "## depth" in md
+    assert "| depth |" in md and "## depth" in md and "One-rule detection" in md
     assert '"control": "depth"' in benchmark.to_json(summaries)

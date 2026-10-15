@@ -9,20 +9,39 @@ from __future__ import annotations
 import numpy as np
 
 
-def row_profile(img: np.ndarray, trim_frac: float = 0.1) -> np.ndarray:
-    """Mean brightness per row, ignoring the outer columns (sector edges, side text)."""
+def row_profile(img: np.ndarray, mask: np.ndarray | None = None, trim_frac: float = 0.1,
+                min_valid: int = 20) -> np.ndarray:
+    """Mean brightness per row over valid pixels; NaN for rows with too few. Without a mask the
+    outer columns are trimmed (sector edges, side text)."""
     h, w = img.shape
-    c0, c1 = int(w * trim_frac), int(w * (1 - trim_frac))
-    return img[:, c0:c1].astype(np.float32).mean(axis=1)
+    g = img.astype(np.float32)
+    if mask is None:
+        c0, c1 = int(w * trim_frac), int(w * (1 - trim_frac))
+        return g[:, c0:c1].mean(axis=1)
+    counts = mask.sum(axis=1)
+    sums = (g * mask).sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        prof = np.where(counts >= min_valid, sums / np.maximum(counts, 1), np.nan)
+    return prof
 
 
-def tgc_features(img: np.ndarray, n_bands: int = 4) -> dict[str, float]:
-    prof = row_profile(img)
+def tgc_features(img: np.ndarray, mask: np.ndarray | None = None, n_bands: int = 4) -> dict[str, float]:
+    prof = row_profile(img, mask)
     h = prof.size
     z = np.linspace(0.0, 1.0, h)
-    slope, intercept = np.polyfit(z, prof, 1)
-    resid = prof - (slope * z + intercept)
-    bands = [prof[i * h // n_bands : (i + 1) * h // n_bands].mean() for i in range(n_bands)]
+    ok = np.isfinite(prof)
+    nan = float("nan")
+    if ok.sum() < 10:
+        feats = {"tgc_slope": nan, "tgc_resid_rms": nan, "tgc_far_near_ratio": nan, "tgc_band_range": nan}
+        feats.update({f"tgc_band{i}_mean": nan for i in range(n_bands)})
+        return feats
+    slope, intercept = np.polyfit(z[ok], prof[ok], 1)
+    resid = prof[ok] - (slope * z[ok] + intercept)
+    # bands over the valid depth span, so a sector's empty top rows do not count as a band
+    valid_rows = np.flatnonzero(ok)
+    r0, r1 = valid_rows[0], valid_rows[-1] + 1
+    edges = np.linspace(r0, r1, n_bands + 1).astype(int)
+    bands = [float(np.nanmean(prof[edges[i]:edges[i + 1]])) for i in range(n_bands)]
     feats = {
         "tgc_slope": float(slope),  # grey levels per full depth; negative = far field dark
         "tgc_resid_rms": float(np.sqrt((resid ** 2).mean())),  # bumps = one slider off
@@ -30,5 +49,5 @@ def tgc_features(img: np.ndarray, n_bands: int = 4) -> dict[str, float]:
         "tgc_band_range": float(max(bands) - min(bands)),
     }
     for i, b in enumerate(bands):
-        feats[f"tgc_band{i}_mean"] = float(b)
+        feats[f"tgc_band{i}_mean"] = b
     return feats

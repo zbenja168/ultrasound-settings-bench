@@ -6,14 +6,18 @@ import numpy as np
 from .detectors import depth_features, focus_features, gain_features, tgc_features
 
 
-def compute_features(img_gray: np.ndarray, target_mask: np.ndarray | None = None) -> dict[str, float]:
+def compute_features(img_gray: np.ndarray, mask: np.ndarray | None = None,
+                     target_mask: np.ndarray | None = None) -> dict[str, float]:
+    """mask: valid-tissue pixels (see mask.py); None means the whole rectangle is tissue."""
     if img_gray.ndim != 2:
         raise ValueError("compute_features wants a 2-D grayscale image area")
+    if mask is not None and mask.shape != img_gray.shape:
+        raise ValueError(f"mask {mask.shape} does not match image {img_gray.shape}")
     f: dict[str, float] = {}
-    f.update(gain_features(img_gray))
-    f.update(tgc_features(img_gray))
-    f.update(depth_features(img_gray, target_mask))
-    f.update(focus_features(img_gray))
+    f.update(gain_features(img_gray, mask))
+    f.update(tgc_features(img_gray, mask))
+    f.update(depth_features(img_gray, mask, target_mask))
+    f.update(focus_features(img_gray, mask))
     return f
 
 

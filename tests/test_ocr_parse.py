@@ -23,6 +23,7 @@ def test_preprocess_inverts_dark_strip():
     strip[5:15, 10:30] = 240
     out = preprocess_strip(strip, scale=2)
     assert out.shape == (40, 200)
+    assert parse_settings("Frq 4.0MH2").freq_mhz == 4.0  # common Tesseract misread
     assert out.mean() > 128  # mostly white background after inversion
 
 

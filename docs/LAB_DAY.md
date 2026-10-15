@@ -16,6 +16,8 @@ knob moved at a time, every other knob at its correct value, at least 100 frames
 1. **Plug in and find the capture index.** `python scripts/pick_regions.py --source 0 ...`; if the window shows nothing, try 1 and 2.
 2. **Pick the regions once.** Drag the image area, Enter, drag the settings strip, Enter. Saves `data/ge_phantom/layout.json` and a sample frame.
 3. **Check OCR reads the strip.** `python scripts/read_strip.py --source 1 --layout data/ge_phantom/layout.json`. If gain or depth come back empty, screenshot the strip and add a regex line in `ocr.py`; do not continue until it reads.
+3b. **Build the mask.** With the probe on the phantom, wiggle it slightly and run `python scripts/estimate_mask.py --source 1 --layout data/ge_phantom/layout.json`. Open `mask_preview.png`: the green line must hug the sector edge and exclude the depth ticks and focus caret. If the cyst is excluded, the gain is too low for the mask step; raise it and rerun.
+3c. **Watch the detectors live.** `python scripts/live_monitor.py --source 1 --layout data/ge_phantom/layout.json --mask data/ge_phantom/mask.png --ocr`. Turn gain up and down and confirm the gain mean follows; change depth and confirm target_bottom follows. Thirty seconds here saves an afternoon of blind recording.
 4. **Set the correct view.** Abdominal preset, the phantom's main cyst in the lower half to three quarters of the screen, gain so the cyst is black and the background mid-grey, TGC flat (the phantom attenuates uniformly), focus at the cyst. Write the knob values down; those are the correct levels.
 5. **Sweep each knob, one at a time, with the others at correct.** Clamp the probe first.
 
@@ -34,7 +36,7 @@ knob moved at a time, every other knob at its correct value, at least 100 frames
 ## After
 
 ```
-python scripts/run_benchmark.py --manifest data/ge_phantom/manifest.csv --layout data/ge_phantom/layout.json --out outputs/ge_phantom --title "GE phantom sweep"
+python scripts/run_benchmark.py --manifest data/ge_phantom/manifest.csv --layout data/ge_phantom/layout.json --mask data/ge_phantom/mask.png --out outputs/ge_phantom --title "GE phantom sweep"
 ```
 
 The table in `outputs/ge_phantom.md` is the deliverable. Copy `data/ge_phantom/` somewhere safe

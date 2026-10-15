@@ -8,11 +8,12 @@ import argparse
 import csv
 import os
 import sys
+from dataclasses import replace
 
 import cv2
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from usbench.synth import SWEEPS, render, settings_for  # noqa: E402
+from usbench.synth import CORRECT, SWEEPS, render, settings_for  # noqa: E402
 
 
 def main() -> None:
@@ -20,15 +21,18 @@ def main() -> None:
     ap.add_argument("--out", default="data/synthetic")
     ap.add_argument("--frames", type=int, default=40, help="frames per level")
     ap.add_argument("--controls", default=",".join(SWEEPS))
+    ap.add_argument("--sector", action="store_true",
+                    help="curvilinear fan with black corners and static overlays; then run estimate_mask.py on any level folder")
     a = ap.parse_args()
 
+    base = replace(CORRECT, sector=a.sector, overlay=a.sector)
     rows = []
     for control in a.controls.split(","):
         sw = SWEEPS[control]
         for level in sw["levels"]:
             d = os.path.join(a.out, control, f"{level:g}")
             os.makedirs(d, exist_ok=True)
-            s = settings_for(control, level)
+            s = settings_for(control, level, base)
             for i in range(a.frames):
                 p = os.path.join(d, f"frame_{i:03d}.png")
                 if not os.path.exists(p):

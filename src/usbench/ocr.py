@@ -6,11 +6,15 @@ drawn as a curve, not printed, so it is read separately (see tgc_curve_from_grap
 """
 from __future__ import annotations
 
+import os
 import re
+import shutil
 from dataclasses import asdict, dataclass
 
 import cv2
 import numpy as np
+
+_WIN_DEFAULT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
 @dataclass
@@ -28,7 +32,8 @@ class Settings:
 # GE strips vary by model; each pattern is tried in order. Add a line when a new machine shows up.
 _GAIN = [r"\bG(?:n|ain)?\s*[:=]?\s*(\d{1,3})\b", r"\b(\d{1,3})\s*%?\s*G(?:n|ain)\b"]
 _DEPTH = [r"\bD(?:epth)?\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)\s*cm\b", r"\b(\d{1,2}(?:[.,]\d)?)\s*cm\b"]
-_FREQ = [r"\b(?:Frq|Freq|F)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)\s*MHz\b", r"\b(\d{1,2}(?:[.,]\d)?)\s*MHz\b"]
+# "MHz" comes back from Tesseract as "MH2" or "MHZ" often enough to allow for it
+_FREQ = [r"\b(?:Frq|Freq|F)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)\s*MH[zZ2]\b", r"\b(\d{1,2}(?:[.,]\d)?)\s*MH[zZ2]\b"]
 _PRESET = [r"\b(Abd(?:omen)?|Card(?:iac)?|Vasc(?:ular)?|MSK|Thy(?:roid)?|OB|Gyn|Lung|Renal|Bladder|FAST|Nerve|Small Parts|SmP)\b"]
 
 
@@ -56,7 +61,7 @@ def parse_settings(text: str) -> Settings:
     )
 
 
-def preprocess_strip(strip_bgr: np.ndarray, scale: int = 3) -> np.ndarray:
+def preprocess_strip(strip_bgr: np.ndarray, scale: int = 4) -> np.ndarray:
     """White-on-dark screen text -> black-on-white, upscaled, which is what Tesseract likes."""
     g = strip_bgr if strip_bgr.ndim == 2 else cv2.cvtColor(strip_bgr, cv2.COLOR_BGR2GRAY)
     g = cv2.resize(g, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
@@ -74,6 +79,10 @@ def read_strip(strip_bgr: np.ndarray, tesseract_cmd: str | None = None) -> Setti
         raise RuntimeError("pip install pytesseract, and install the Tesseract binary") from e
     if tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+    elif os.environ.get("TESSERACT_CMD"):
+        pytesseract.pytesseract.tesseract_cmd = os.environ["TESSERACT_CMD"]
+    elif shutil.which("tesseract") is None and os.path.exists(_WIN_DEFAULT):
+        pytesseract.pytesseract.tesseract_cmd = _WIN_DEFAULT
     img = preprocess_strip(strip_bgr)
     text = pytesseract.image_to_string(img, config="--psm 6")
     return parse_settings(text)

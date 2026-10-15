@@ -4,12 +4,18 @@ Input is a manifest CSV with one row per frame:
     path, control, level, correct, error, unit
 where `correct` is 1 for frames at the correct setting, `error` is the absolute deviation from
 correct in the control's units, and `level` is the signed knob value. Every frame is reduced to
-the detector features, then for each (control, level) pair a one-feature threshold is fitted on
-half the frames and scored on the other half. The smallest separable error is the smallest error
-magnitude at which every level of that magnitude scores at least `min_acc` balanced accuracy.
+the detector features, then two questions are asked per control:
 
-One threshold per level is an upper bound on what a real coach could do with these features; it
-answers "is the difference visible at all", which is the benchmark's question.
+1. Per level (upper bound): a one-feature threshold is fitted on half the frames of that level
+   plus half the correct frames, and scored on the other halves. "Is the difference visible at all."
+2. One rule (what a coach could ship): a two-sided interval on one feature is fitted from the
+   correct frames ONLY (5th to 95th percentile of the training half). A level is detected when at
+   least `min_acc` of its held-out frames fall outside the interval, and the rule is valid only if
+   at most `max_false_alarm` of the held-out correct frames do. The feature is chosen per control
+   as the one that detects the smallest error.
+
+The smallest separable error under each question is the smallest error magnitude at which every
+level of that magnitude passes.
 """
 from __future__ import annotations
 
@@ -17,7 +23,7 @@ import csv
 import json
 import math
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 import numpy as np
 
@@ -42,6 +48,16 @@ class LevelResult:
 
 
 @dataclass
+class RuleResult:
+    feature: str
+    lo: float
+    hi: float
+    false_alarm: float  # held-out correct frames outside the interval
+    detect_by_level: dict[str, float]  # level -> fraction of held-out frames flagged
+    smallest_separable_error: float | None
+
+
+@dataclass
 class ControlSummary:
     control: str
     unit: str
@@ -49,6 +65,7 @@ class ControlSummary:
     smallest_separable_error: float | None
     feature_at_threshold: str | None
     levels: list[LevelResult]
+    rule: RuleResult | None = None
 
 
 def read_manifest(path: str) -> list[dict]:
@@ -62,8 +79,9 @@ def read_manifest(path: str) -> list[dict]:
 
 
 def featurize(rows: list[dict], layout: ScreenLayout | None = None, cache: str | None = None,
-              base_dir: str = "") -> list[dict]:
-    """Attach detector features to every row. Cached as JSON keyed by path so re-runs are instant."""
+              base_dir: str = "", mask: np.ndarray | None = None) -> list[dict]:
+    """Attach detector features to every row. Cached as JSON keyed by path so re-runs are instant.
+    `mask` is the valid-pixel mask of the image area (see mask.py), same shape as the crop."""
     import cv2
 
     cached: dict[str, dict] = {}
@@ -80,7 +98,7 @@ def featurize(rows: list[dict], layout: ScreenLayout | None = None, cache: str |
         if frame is None:
             raise FileNotFoundError(full)
         lay = layout or ScreenLayout.whole_frame(frame)
-        feats = compute_features(to_gray(lay.crop_image(frame)))
+        feats = compute_features(to_gray(lay.crop_image(frame)), mask)
         r["features"] = feats
         cached[p] = feats
     if cache:
@@ -116,26 +134,35 @@ def _best_threshold(x: np.ndarray, y: np.ndarray) -> tuple[float, str, float]:
     return best
 
 
-def _split(idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _split(n: int) -> tuple[np.ndarray, np.ndarray]:
     """Deterministic halves by position: even indices train, odd test."""
+    idx = np.arange(n)
     return idx[::2], idx[1::2]
 
 
-def evaluate_control(rows: list[dict], control: str, min_acc: float = 0.9) -> ControlSummary:
-    sub = [r for r in rows if r["control"] == control]
-    correct = [r for r in sub if r["correct"] == 1]
-    unit = sub[0]["unit"] if sub else ""
-    feats = FEATURES_FOR_CONTROL[control]
+def _col(rows: list[dict], fname: str) -> np.ndarray:
+    return np.array([r["features"].get(fname, np.nan) for r in rows], dtype=float)
+
+
+def _smallest_passing(results: dict[float, list[bool]]) -> float | None:
+    """results: error magnitude -> pass flags for every level of that magnitude."""
+    for e in sorted(results):
+        if results[e] and all(results[e]):
+            return e
+    return None
+
+
+def per_level(sub: list[dict], correct: list[dict], feats: tuple[str, ...], unit: str,
+              control: str) -> list[LevelResult]:
     levels = sorted({r["level"] for r in sub if r["correct"] == 0})
-    results: list[LevelResult] = []
+    c_tr, c_te = _split(len(correct))
+    out: list[LevelResult] = []
     for lv in levels:
         err_rows = [r for r in sub if r["level"] == lv]
-        c_tr, c_te = _split(np.arange(len(correct)))
-        e_tr, e_te = _split(np.arange(len(err_rows)))
+        e_tr, e_te = _split(len(err_rows))
         best: LevelResult | None = None
         for fname in feats:
-            xc = np.array([correct[i]["features"].get(fname, np.nan) for i in range(len(correct))])
-            xe = np.array([err_rows[i]["features"].get(fname, np.nan) for i in range(len(err_rows))])
+            xc, xe = _col(correct, fname), _col(err_rows, fname)
             x_tr = np.concatenate([xc[c_tr], xe[e_tr]])
             y_tr = np.concatenate([np.zeros(len(c_tr)), np.ones(len(e_tr))])
             thr, direction, acc_tr = _best_threshold(x_tr, y_tr)
@@ -150,41 +177,93 @@ def evaluate_control(rows: list[dict], control: str, min_acc: float = 0.9) -> Co
                 best = LevelResult(control, lv, err_rows[0]["error"], unit, len(err_rows),
                                    len(correct), fname, thr, direction, acc_tr, acc_te)
         if best is not None:
-            results.append(best)
+            out.append(best)
+    return out
 
-    # smallest magnitude at which EVERY level of that magnitude passes on the held-out half
-    by_err: dict[float, list[LevelResult]] = {}
+
+def one_rule(sub: list[dict], correct: list[dict], feats: tuple[str, ...], min_acc: float,
+             max_false_alarm: float, pct: tuple[float, float] = (5.0, 95.0)) -> RuleResult | None:
+    """Fit a correct-only interval per feature; keep the feature that detects the smallest error."""
+    levels = sorted({r["level"] for r in sub if r["correct"] == 0})
+    c_tr, c_te = _split(len(correct))
+    best: RuleResult | None = None
+    best_key: tuple = ()
+    for fname in feats:
+        xc = _col(correct, fname)
+        tr = xc[c_tr][np.isfinite(xc[c_tr])]
+        if tr.size < 4:
+            continue
+        lo, hi = np.percentile(tr, pct)
+        te = xc[c_te]
+        with np.errstate(invalid="ignore"):
+            fa = float(np.mean(~((te >= lo) & (te <= hi))))  # NaN counts as an alarm
+        if fa > max_false_alarm:
+            continue
+        detect: dict[str, float] = {}
+        by_err: dict[float, list[bool]] = {}
+        for lv in levels:
+            err_rows = [r for r in sub if r["level"] == lv]
+            _, e_te = _split(len(err_rows))
+            xe = _col(err_rows, fname)[e_te]
+            with np.errstate(invalid="ignore"):
+                d = float(np.mean(~((xe >= lo) & (xe <= hi)))) if xe.size else float("nan")
+            detect[f"{lv:g}"] = d
+            by_err.setdefault(err_rows[0]["error"], []).append(bool(d >= min_acc))
+        sse = _smallest_passing(by_err)
+        key = (math.inf if sse is None else sse, fa)
+        if best is None or key < best_key:
+            best, best_key = RuleResult(fname, float(lo), float(hi), fa, detect, sse), key
+    return best
+
+
+def evaluate_control(rows: list[dict], control: str, min_acc: float = 0.9,
+                     max_false_alarm: float = 0.15) -> ControlSummary:
+    sub = [r for r in rows if r["control"] == control]
+    correct = [r for r in sub if r["correct"] == 1]
+    unit = sub[0]["unit"] if sub else ""
+    feats = FEATURES_FOR_CONTROL[control]
+    results = per_level(sub, correct, feats, unit, control)
+    by_err: dict[float, list[bool]] = {}
     for r in results:
-        by_err.setdefault(r.error, []).append(r)
-    smallest, feat = None, None
-    for e in sorted(by_err):
-        if all(x.test_acc >= min_acc for x in by_err[e]):
-            smallest = e
-            feat = ", ".join(sorted({x.feature for x in by_err[e]}))
-            break
-    return ControlSummary(control, unit, min_acc, smallest, feat, results)
+        by_err.setdefault(r.error, []).append(bool(r.test_acc >= min_acc))
+    smallest = _smallest_passing(by_err)
+    feat = None
+    if smallest is not None:
+        feat = ", ".join(sorted({r.feature for r in results if r.error == smallest}))
+    rule = one_rule(sub, correct, feats, min_acc, max_false_alarm) if correct else None
+    return ControlSummary(control, unit, min_acc, smallest, feat, results, rule)
 
 
-def run(rows: list[dict], min_acc: float = 0.9) -> list[ControlSummary]:
+def run(rows: list[dict], min_acc: float = 0.9, max_false_alarm: float = 0.15) -> list[ControlSummary]:
     controls = [c for c in FEATURES_FOR_CONTROL if any(r["control"] == c for r in rows)]
-    return [evaluate_control(rows, c, min_acc) for c in controls]
+    return [evaluate_control(rows, c, min_acc, max_false_alarm) for c in controls]
+
+
+def _fmt_err(e: float | None, unit: str) -> str:
+    return "not reached" if e is None else f"{e:g} {unit}"
 
 
 def to_markdown(summaries: list[ControlSummary], title: str = "Settings benchmark") -> str:
     out = [f"# {title}", "",
-           "| Control | Smallest separable error | Feature that separates it | Pass bar |",
-           "|---|---|---|---|"]
+           "| Control | Smallest separable error, per-level threshold (upper bound) | Smallest separable error, one correct-only rule | Rule feature and interval | Rule false alarms on correct |",
+           "|---|---|---|---|---|"]
     for s in summaries:
-        sse = "not reached" if s.smallest_separable_error is None else f"{s.smallest_separable_error:g} {s.unit}"
-        out.append(f"| {s.control} | {sse} | {s.feature_at_threshold or ''} | balanced acc >= {s.min_acc:.2f} on held-out half |")
-    out.append("")
+        r = s.rule
+        out.append(
+            f"| {s.control} | {_fmt_err(s.smallest_separable_error, s.unit)} ({s.feature_at_threshold or ''}) | "
+            f"{_fmt_err(r.smallest_separable_error, s.unit) if r else 'no rule'} | "
+            f"{(r.feature + ' in [' + format(r.lo, '.3g') + ', ' + format(r.hi, '.3g') + ']') if r else ''} | "
+            f"{(format(r.false_alarm, '.2f')) if r else ''} |")
+    out += ["", f"Pass bar: at least {summaries[0].min_acc:.2f} of held-out frames at a level flagged "
+                "(per-level: balanced accuracy); every level of an error magnitude must pass." if summaries else "", ""]
     for s in summaries:
         out += [f"## {s.control}", "",
-                "| Level | Error | Feature | Direction | Threshold | Train acc | Test acc |",
-                "|---|---|---|---|---|---|---|"]
+                "| Level | Error | Per-level feature | Direction | Threshold | Train acc | Test acc | One-rule detection |",
+                "|---|---|---|---|---|---|---|---|"]
         for r in sorted(s.levels, key=lambda r: r.level):
+            d = s.rule.detect_by_level.get(f"{r.level:g}", float("nan")) if s.rule else float("nan")
             out.append(f"| {r.level:g} | {r.error:g} {r.unit} | {r.feature} | {r.direction} | "
-                       f"{r.threshold:.3f} | {r.train_acc:.2f} | {r.test_acc:.2f} |")
+                       f"{r.threshold:.3f} | {r.train_acc:.2f} | {r.test_acc:.2f} | {d:.2f} |")
         out.append("")
     return "\n".join(out)
 
