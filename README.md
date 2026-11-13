@@ -3,7 +3,7 @@
 How small a gain, depth, TGC or focus error can software detect from the captured ultrasound
 screen? Nobody has published that number. This repo measures it.
 
-The scanner (a GE cart) outputs its display over HDMI into a capture card. Everything here runs on
+The scanner (a GE Venue Go) outputs its display over HDMI into a capture card. Everything here runs on
 that video on a laptop: the machine is a dumb video source, and no vendor cooperation is needed.
 
 ```
