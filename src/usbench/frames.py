@@ -25,7 +25,8 @@ class FrameSource:
             # Same order that works for the Cam Link on the Venue Go in the coverage project:
             # Media Foundation first, then DirectShow, then default; always ask for 1920x1080.
             width, height = width or 1920, height or 1080
-            backends = [("MSMF", cv2.CAP_MSMF), ("DSHOW", cv2.CAP_DSHOW), ("default", cv2.CAP_ANY)]                 if os.name == "nt" else [("default", cv2.CAP_ANY)]
+            backends = ([("MSMF", cv2.CAP_MSMF), ("DSHOW", cv2.CAP_DSHOW), ("default", cv2.CAP_ANY)]
+                        if os.name == "nt" else [("default", cv2.CAP_ANY)])
             for name, be in backends:
                 cap = cv2.VideoCapture(int(source), be)
                 if not cap.isOpened():
