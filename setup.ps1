@@ -1,6 +1,6 @@
 # One-time setup on a new Windows laptop. From the repo folder, in PowerShell:
 #     powershell -ExecutionPolicy Bypass -File setup.ps1
-# Installs Python 3.12 and Tesseract if missing (via winget), builds .venv, runs the tests,
+# Installs Python 3.12 if missing (via winget), builds .venv, runs the tests,
 # and lists the capture devices so you know which --source number is the Cam Link.
 
 $ErrorActionPreference = "Stop"
@@ -27,16 +27,10 @@ if (-not $py) {
 }
 Write-Host "using: $py"
 
-Write-Host "== Tesseract (reads the probe and preset off the screen)" -ForegroundColor Cyan
-if (-not (Test-Path "C:\Program Files\Tesseract-OCR\tesseract.exe") -and -not (Get-Command tesseract -ErrorAction SilentlyContinue)) {
-    winget install --id UB-Mannheim.TesseractOCR -e --accept-package-agreements --accept-source-agreements --silent
-}
-if (Test-Path "C:\Program Files\Tesseract-OCR\tesseract.exe") { Write-Host "Tesseract OK" } else { Write-Host "Tesseract missing: OCR of the header will be skipped, everything else works" -ForegroundColor Yellow }
-
 Write-Host "== Virtual environment and packages" -ForegroundColor Cyan
 if (-not (Test-Path ".venv\Scripts\python.exe")) { cmd /c "$py -m venv .venv" }
 & .venv\Scripts\python.exe -m pip install -q --upgrade pip
-& .venv\Scripts\python.exe -m pip install -q -e ".[ocr,dev]"
+& .venv\Scripts\python.exe -m pip install -q -e ".[dev]"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
 Write-Host "== Tests (includes a real Venue Go frame)" -ForegroundColor Cyan

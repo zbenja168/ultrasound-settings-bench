@@ -12,8 +12,8 @@ C1-5 Abdomen at 16 cm). The idle scan screen shows:
 |---|---|---|
 | Depth | no number, but a yellow ruler with one tick per cm | read from the ruler: 16.0 cm, 47 px per cm, every frame |
 | Focus | a blue dot beside the ruler | read from the dot: 11.5 cm |
-| Probe and preset | "C1-5   Abdomen" in the header | OCR |
-| MI, TIs, acoustic output | header, right | OCR |
+| Probe and preset | "C1-5   Abdomen" in the header | OCR, only if Tesseract is installed; optional |
+| MI, TIs, acoustic output | header, right | OCR, optional |
 | Gain | **not shown** while scanning | typed in as the level label; photograph the value when the Gain control is open |
 | Frequency | **not shown** | same: label it, photograph the Freq. control |
 | TGC | **not shown**; sliders open from the TGC button | same: label it, photograph the sliders |
@@ -49,7 +49,7 @@ python scripts/run_benchmark.py --manifest data/venue/manifest.csv --venue data/
 
 ## Bring
 
-- Laptop with this repo, `.venv` built, Tesseract installed, `scripts/read_strip.py` tested on any screenshot.
+- Laptop with this repo set up (`setup.ps1`), about 15 GB free. Tesseract is not needed.
 - HDMI capture card and HDMI cable. Check the cart's output menu is set to full screen, not image-only; image-only strips the settings text and kills the ground truth.
 - The phantom. A QA phantom with cysts at several depths (CIRS 040GSE or similar) is ideal; a training phantom with one fluid-filled structure works.
 - Probe holder or clamp. The probe must not move between levels. A marker-cube rig from the coverage project does this.

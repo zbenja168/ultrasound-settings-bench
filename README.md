@@ -47,17 +47,17 @@ Download the repo (GitHub, green Code button, Download ZIP, then unzip) or `git 
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-It installs Python 3.12 and Tesseract if missing, builds `.venv`, runs the tests, and lists capture
+It installs Python 3.12 if missing, builds `.venv`, runs the tests, and lists capture
 devices (plug the Cam Link in first). Manual steps, if you prefer:
 
 ```
 python -m venv .venv
-.venv\Scripts\python -m pip install -e .[ocr,dev]
+.venv\Scripts\python -m pip install -e .[dev]
 ```
 
-OCR also needs the Tesseract binary (`winget install UB-Mannheim.TesseractOCR`). The default
-Windows install path is found automatically; otherwise point to it with `--tesseract` or the
-`TESSERACT_CMD` environment variable. Everything except OCR runs without it.
+Tesseract is not needed. On the Venue Go, depth and focus are read from the ruler and marker
+graphics; Tesseract would only read the probe and preset header, and everything runs without it.
+To enable that header check anyway: `winget install UB-Mannheim.TesseractOCR` and `pip install -e .[ocr]`.
 
 ## Run it on synthetic frames
 
