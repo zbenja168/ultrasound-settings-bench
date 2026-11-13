@@ -1,4 +1,5 @@
 """End-to-end OCR on a rendered strip. Skipped when the Tesseract binary is not installed."""
+import importlib.util
 import os
 import shutil
 
@@ -8,7 +9,8 @@ import pytest
 
 from usbench.ocr import _WIN_DEFAULT, read_strip
 
-HAVE_TESS = shutil.which("tesseract") is not None or os.path.exists(_WIN_DEFAULT)
+HAVE_TESS = (importlib.util.find_spec("pytesseract") is not None
+             and (shutil.which("tesseract") is not None or os.path.exists(_WIN_DEFAULT)))
 
 
 def strip_image(text: str, w: int = 700, h: int = 44) -> np.ndarray:

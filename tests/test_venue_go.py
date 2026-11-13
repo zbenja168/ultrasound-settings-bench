@@ -1,6 +1,7 @@
 """GE Venue Go reader on a real HDMI capture (C1-5 Abdomen, 16 cm, phantom, 2026-10-30 bench day of
 the coverage project). Ground truth comes from the screen itself and the bench-day notes."""
 import csv
+import importlib.util
 import os
 import shutil
 
@@ -15,7 +16,8 @@ from usbench.venue_go import (C1_5, IMAGE_RECT, axis_column, click_to_cm, make_p
                               read_ruler, read_screen, valid_mask)
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "venue_go_c1-5_abdomen_16cm.png")
-HAVE_TESS = shutil.which("tesseract") is not None or os.path.exists(_WIN_DEFAULT)
+HAVE_TESS = (importlib.util.find_spec("pytesseract") is not None
+             and (shutil.which("tesseract") is not None or os.path.exists(_WIN_DEFAULT)))
 
 
 @pytest.fixture(scope="module")
