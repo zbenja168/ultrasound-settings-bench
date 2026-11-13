@@ -24,12 +24,14 @@ they only see the image area. The benchmark asks whether the image alone gives t
 | `src/usbench/frames.py` | capture card, video file or image folder, all yielding BGR frames |
 | `src/usbench/regions.py` | image-area and strip rectangles, picked once per machine, saved as JSON |
 | `src/usbench/ocr.py` | Tesseract on the strip plus regex parsing; `parse_settings` is pure text and unit-tested |
+| `src/usbench/venue_go.py` | GE Venue Go screen reader, checked on real captures: depth from the yellow ruler, focus from the blue marker, probe / preset / MI / TIs / output by OCR, the C1-5 fan geometry, per-frame fan mask that rescales with depth, coloured-overlay removal, target followed from one click |
 | `src/usbench/mask.py` | valid-pixel mask of the image area: drops the black corners outside a curvilinear sector and the static burned-in overlays (depth ticks, focus caret, logo), from a short stack of frames |
 | `src/usbench/detectors/` | `gain` (saturation, dark blocks, percentiles), `tgc` (row profile slope and residual), `depth` (anechoic target bottom as a fraction of screen height), `focus` (lateral speckle correlation width per depth band) |
 | `src/usbench/features.py` | one call for all detector numbers, and which features may answer for which control |
 | `src/usbench/synth.py` | synthetic B-mode frames with known knob errors, for testing the pipeline before any capture |
 | `src/usbench/benchmark.py` | per-level threshold fit on half the frames, scored on the other half, smallest separable error per control |
 | `scripts/pick_regions.py` | drag the two rectangles on a live frame |
+| `scripts/fit_venue_sector.py` | Venue Go: check the fan fit and click the target once per session |
 | `scripts/estimate_mask.py` | build `mask.png` for a layout from 40 live frames |
 | `scripts/live_monitor.py` | watch every detector's numbers move as you turn the knobs; with a benchmark `.json` it shows ok / HIGH / LOW per control, the prototype coach screen |
 | `scripts/read_strip.py` | print what OCR reads off the strip right now |

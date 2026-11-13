@@ -42,23 +42,40 @@ def load_rules(path: str | None) -> dict[str, dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True)
-    ap.add_argument("--layout", required=True)
+    ap.add_argument("--layout", help="layout.json; not needed with --venue")
+    ap.add_argument("--venue", help="sector.json: GE Venue Go mode")
     ap.add_argument("--mask")
     ap.add_argument("--rules", help="benchmark .json; enables inside/outside verdicts")
     ap.add_argument("--ocr", action="store_true", help="also OCR the strip every second")
     ap.add_argument("--tesseract", default=os.environ.get("TESSERACT_CMD"))
     a = ap.parse_args()
 
-    layout = ScreenLayout.load(a.layout)
+    per_frame = None
+    if a.venue:
+        from usbench import venue_go
+        with open(a.venue, encoding="utf-8") as f:
+            vj = json.load(f)
+        per_frame = venue_go.make_per_frame(venue_go.Sector.from_dict(vj["sector"]),
+                                            tuple(vj["target_cm"]) if vj.get("target_cm") else None)
+        layout = venue_go.layout()
+    else:
+        layout = ScreenLayout.load(a.layout)
     mask = load_mask(a.mask) if a.mask else None
     rules = load_rules(a.rules)
     src = FrameSource(int(a.source) if a.source.isdigit() else a.source)
     os.makedirs("outputs/snapshots", exist_ok=True)
     last_ocr, ocr_text = 0.0, ""
     for frame in src:
-        img = to_gray(layout.crop_image(frame))
-        feats = compute_features(img, mask)
-        if a.ocr and time.time() - last_ocr > 1.0:
+        if per_frame is not None:
+            out = per_frame(frame)
+            feats = compute_features(out[0], out[1], out[2], **out[3])
+        else:
+            feats = compute_features(to_gray(layout.crop_image(frame)), mask)
+        if a.ocr and time.time() - last_ocr > 1.0 and a.venue:
+            sc = venue_go.read_screen(frame)
+            ocr_text = f"screen: depth={sc.get('depth_cm')} focus={sc.get('focus_cm')} {sc.get('probe')} {sc.get('preset')}"
+            last_ocr = time.time()
+        elif a.ocr and time.time() - last_ocr > 1.0:
             try:
                 from usbench.ocr import read_strip
                 s = read_strip(layout.crop_strip(frame), a.tesseract)

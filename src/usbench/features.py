@@ -7,8 +7,10 @@ from .detectors import depth_features, focus_features, gain_features, tgc_featur
 
 
 def compute_features(img_gray: np.ndarray, mask: np.ndarray | None = None,
-                     target_mask: np.ndarray | None = None) -> dict[str, float]:
-    """mask: valid-tissue pixels (see mask.py); None means the whole rectangle is tissue."""
+                     target_mask: np.ndarray | None = None, apex_row: float | None = None
+                     ) -> dict[str, float]:
+    """mask: valid-tissue pixels (see mask.py); None means the whole rectangle is tissue.
+    apex_row: fan apex row in crop coordinates, for curvilinear probes (see detectors/focus.py)."""
     if img_gray.ndim != 2:
         raise ValueError("compute_features wants a 2-D grayscale image area")
     if mask is not None and mask.shape != img_gray.shape:
@@ -17,7 +19,7 @@ def compute_features(img_gray: np.ndarray, mask: np.ndarray | None = None,
     f.update(gain_features(img_gray, mask))
     f.update(tgc_features(img_gray, mask))
     f.update(depth_features(img_gray, mask, target_mask))
-    f.update(focus_features(img_gray, mask))
+    f.update(focus_features(img_gray, mask, apex_row=apex_row))
     return f
 
 

@@ -5,17 +5,47 @@ knob moved at a time, every other knob at its correct value, at least 100 frames
 
 ## Machine: GE Venue Go (software Vers 305, Revision 65.0, built 2026-01-07)
 
-The Venue Go is touch-only: no knobs, no physical slider bank. That changes a few things.
+Checked against real HDMI captures from the coverage project's bench days (1920x1080, Cam Link,
+C1-5 Abdomen at 16 cm). The idle scan screen shows:
 
-- **Levels are touch steps.** Gain and depth change by swiping over the grey bar or depth scale, or by tapping the control and using + / -. Use + / - only, never swipes, so every level is a whole number of steps and repeatable. Record the number the screen shows; if a control shows no number, record the count of taps from correct and use `--unit steps`.
-- **Auto Optimize must be off for every sweep.** On GE point-of-care machines Auto Optimize can set TGC automatically, and manual changes can switch it off without warning. Check it is off before each sweep and again before the correct-level repeat at the end.
-- **TGC is on-screen sliders that time out.** On related GE handhelds the TGC sliders disappear after a few seconds and the Gain control is disabled while they are open. So the TGC curve may not be visible in the recorded frames: label TGC levels from what you set, photograph the slider positions at each level, and wait for the sliders to close before pressing Enter so they are not in the frames.
-- **The settings are on the touch controls, not one strip.** The HDMI output mirrors the whole screen, including the control panel. If the values sit on several buttons, drag the strip rectangle around all of them; Tesseract reads the block as one page. If OCR misses a value, send a screenshot and the regex gets a line.
+| Setting | On screen? | How the software gets it |
+|---|---|---|
+| Depth | no number, but a yellow ruler with one tick per cm | read from the ruler: 16.0 cm, 47 px per cm, every frame |
+| Focus | a blue dot beside the ruler | read from the dot: 11.5 cm |
+| Probe and preset | "C1-5   Abdomen" in the header | OCR |
+| MI, TIs, acoustic output | header, right | OCR |
+| Gain | **not shown** while scanning | typed in as the level label; photograph the value when the Gain control is open |
+| Frequency | **not shown** | same: label it, photograph the Freq. control |
+| TGC | **not shown**; sliders open from the TGC button | same: label it, photograph the sliders |
 
-- **Stay out of Full-screen mode.** The Venue Go has a full-screen mode that enlarges the image and simplifies the interface, which can hide the control values the OCR reads. Record in the normal layout, and pick the regions in that same layout.
-- **Do not use the button probe's controls during a sweep.** The probe has buttons that can drive the system; pressing them moves the probe. Change settings on the screen only.
+So depth and focus get automatic ground truth on every frame and the recorder warns if the label
+you typed disagrees with the ruler. Gain, frequency and TGC rely on what you type, which is why the
+photographs matter.
 
-HDMI capture from this machine is confirmed: it has worked with a capture card on another project. Focus is still to be checked on the machine; if it is automatic, the focus sweep is dropped and recorded as not adjustable.
+Venue Go habits for the day:
+
+- **Change settings with + / - on the touch controls, never swipes,** so every level is a whole number of steps. Use the number the control shows when it is open as the level; otherwise count taps from correct and use `--unit steps`.
+- **Auto Optimize ("Auto" on the right-hand bar) off for every sweep.** Check again before the correct-level repeat at the end.
+- **Close every panel before recording.** The TGC sliders, the Gain and Freq. controls, and the Auto Tools panel (the "Hydronephrosis?" helper on the left) must be shut so they are not in the frames.
+- **Stay out of full-screen mode** so the ruler and header stay visible; the reader depends on them.
+- **Do not use the button probe's controls** during a sweep; pressing them moves the probe.
+- **Keep the C1-5 probe.** The fan shape is stored for it (`venue_go.C1_5`). Another probe needs a fresh fit and `--use-fit`.
+
+HDMI capture from this machine is confirmed (Cam Link 4K, 1920x1080 at 30 fps). Focus
+adjustability is still to be checked on the machine; the marker is there, so it very likely is.
+
+### Venue Go commands
+
+```
+# once, at the correct setting, probe clamped: check the fan, click the target cyst
+python scripts/fit_venue_sector.py --source 1 --frames 120 --out data/venue/sector.json
+# watch every detector move while you turn things (screen readout once a second)
+python scripts/live_monitor.py --source 1 --venue data/venue/sector.json --ocr
+# each sweep
+python scripts/record_sweep.py --source 1 --machine venue_go --control gain --unit steps --levels -6,-4,-2,0,2,4,6 --correct 0 --frames 120 --out data/venue
+# afterwards
+python scripts/run_benchmark.py --manifest data/venue/manifest.csv --venue data/venue/sector.json --out outputs/venue --title "Venue Go phantom sweep"
+```
 
 ## Bring
 
@@ -28,7 +58,7 @@ HDMI capture from this machine is confirmed: it has worked with a capture card o
 ## Steps
 
 1. **Plug in and find the capture index.** `python scripts/pick_regions.py --source 0 ...`; if the window shows nothing, try 1 and 2.
-2. **Pick the regions once.** Drag the image area, Enter, drag the settings strip, Enter. Saves `data/ge_phantom/layout.json` and a sample frame.
+2. **Pick the regions once** (generic machines; on the Venue Go use `fit_venue_sector.py` above instead of steps 2 and 3b). Drag the image area, Enter, drag the settings strip, Enter. Saves `data/ge_phantom/layout.json` and a sample frame.
 3. **Check OCR reads the strip.** `python scripts/read_strip.py --source 1 --layout data/ge_phantom/layout.json`. If gain or depth come back empty, screenshot the strip and add a regex line in `ocr.py`; do not continue until it reads.
 3b. **Build the mask.** With the probe on the phantom, wiggle it slightly and run `python scripts/estimate_mask.py --source 1 --layout data/ge_phantom/layout.json`. Open `mask_preview.png`: the green line must hug the sector edge and exclude the depth ticks and focus caret. If the cyst is excluded, the gain is too low for the mask step; raise it and rerun.
 3c. **Watch the detectors live.** `python scripts/live_monitor.py --source 1 --layout data/ge_phantom/layout.json --mask data/ge_phantom/mask.png --ocr`. Turn gain up and down and confirm the gain mean follows; change depth and confirm target_bottom follows. Thirty seconds here saves an afternoon of blind recording.

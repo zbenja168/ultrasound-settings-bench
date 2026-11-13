@@ -20,6 +20,7 @@ def main() -> None:
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--layout", help="layout.json from pick_regions.py; omit for pre-cropped or synthetic frames")
     ap.add_argument("--mask", help="mask.png from estimate_mask.py (valid tissue pixels of the image area)")
+    ap.add_argument("--venue", help="sector.json from fit_venue_sector.py: GE Venue Go mode (per-frame fan mask from the depth ruler, target from the clicked point)")
     ap.add_argument("--out", default="outputs/benchmark", help="output prefix (writes .md and .json)")
     ap.add_argument("--min-acc", type=float, default=0.9)
     ap.add_argument("--max-false-alarm", type=float, default=0.15)
@@ -30,7 +31,16 @@ def main() -> None:
     layout = ScreenLayout.load(a.layout) if a.layout else None
     mask = load_mask(a.mask) if a.mask else None
     base = os.path.dirname(os.path.abspath(a.manifest))
-    rows = benchmark.featurize(rows, layout, cache=a.out + "_features.json", base_dir=base, mask=mask)
+    per_frame = None
+    if a.venue:
+        import json
+        from usbench.venue_go import Sector, make_per_frame
+        with open(a.venue, encoding="utf-8") as f:
+            vj = json.load(f)
+        tgt = tuple(vj["target_cm"]) if vj.get("target_cm") else None
+        per_frame = make_per_frame(Sector.from_dict(vj["sector"]), tgt)
+    rows = benchmark.featurize(rows, layout, cache=a.out + "_features.json", base_dir=base, mask=mask,
+                               per_frame=per_frame)
     summaries = benchmark.run(rows, a.min_acc, a.max_false_alarm)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     md = benchmark.to_markdown(summaries, a.title)

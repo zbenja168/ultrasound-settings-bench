@@ -79,9 +79,11 @@ def read_manifest(path: str) -> list[dict]:
 
 
 def featurize(rows: list[dict], layout: ScreenLayout | None = None, cache: str | None = None,
-              base_dir: str = "", mask: np.ndarray | None = None) -> list[dict]:
+              base_dir: str = "", mask: np.ndarray | None = None, per_frame=None) -> list[dict]:
     """Attach detector features to every row. Cached as JSON keyed by path so re-runs are instant.
-    `mask` is the valid-pixel mask of the image area (see mask.py), same shape as the crop."""
+    `mask` is the valid-pixel mask of the image area (see mask.py), same shape as the crop.
+    `per_frame(frame_bgr) -> (crop_gray, mask, target_mask[, extra kwargs])` overrides layout and mask when the
+    mask must change with the frame (the Venue Go fan rescales with depth; see venue_go.py)."""
     import cv2
 
     cached: dict[str, dict] = {}
@@ -97,8 +99,14 @@ def featurize(rows: list[dict], layout: ScreenLayout | None = None, cache: str |
         frame = cv2.imread(full, cv2.IMREAD_COLOR)
         if frame is None:
             raise FileNotFoundError(full)
-        lay = layout or ScreenLayout.whole_frame(frame)
-        feats = compute_features(to_gray(lay.crop_image(frame)), mask)
+        if per_frame is not None:
+            out = per_frame(frame)
+            crop, fmask, tmask = out[:3]
+            extra = out[3] if len(out) > 3 else {}
+            feats = compute_features(crop, fmask, tmask, **extra)
+        else:
+            lay = layout or ScreenLayout.whole_frame(frame)
+            feats = compute_features(to_gray(lay.crop_image(frame)), mask)
         r["features"] = feats
         cached[p] = feats
     if cache:

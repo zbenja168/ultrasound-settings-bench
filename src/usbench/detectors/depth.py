@@ -33,6 +33,34 @@ def find_anechoic_target(img: np.ndarray, mask: np.ndarray | None = None, dark_p
     return labels == k
 
 
+def find_target_at(img: np.ndarray, mask: np.ndarray | None, seed_rc: tuple[int, int],
+                   dark_pct: float = 15.0, search_px: int = 40) -> np.ndarray | None:
+    """The dark blob at (or nearest to) a seed point. Stands in for a landmark detector: on a
+    phantom with several cysts, or a patient, "largest dark blob" picks the wrong structure, so the
+    operator marks the target once and the detector segments it at every level."""
+    if mask is None:
+        mask = np.ones(img.shape, bool)
+    vals = img[mask]
+    if vals.size < 100:
+        return None
+    thr = max(float(np.percentile(vals, dark_pct)), 1.0)
+    dark = ((img <= thr) & mask).astype(np.uint8)
+    dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(dark, connectivity=8)
+    if n <= 1:
+        return None
+    r, c = int(np.clip(seed_rc[0], 0, img.shape[0] - 1)), int(np.clip(seed_rc[1], 0, img.shape[1] - 1))
+    k = int(labels[r, c])
+    if k == 0:
+        d = np.hypot(cents[1:, 0] - c, cents[1:, 1] - r)
+        j = int(np.argmin(d))
+        if d[j] > search_px + np.sqrt(stats[j + 1, cv2.CC_STAT_AREA] / np.pi):
+            return None
+        k = j + 1
+    return labels == k
+
+
 def depth_features(img: np.ndarray, mask: np.ndarray | None = None,
                    target_mask: np.ndarray | None = None) -> dict[str, float]:
     h, w = img.shape

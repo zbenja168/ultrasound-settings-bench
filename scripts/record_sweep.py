@@ -22,13 +22,14 @@ from usbench.frames import FrameSource  # noqa: E402
 from usbench.regions import ScreenLayout  # noqa: E402
 
 FIELDS = ["path", "control", "level", "correct", "error", "unit", "session", "ocr_gain", "ocr_depth",
-          "ocr_freq", "ocr_preset"]
+          "ocr_freq", "ocr_preset", "screen_focus_cm", "screen_probe", "screen_ao_pct"]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True, help="capture card index (try 0, 1, 2)")
-    ap.add_argument("--layout", required=True)
+    ap.add_argument("--layout", help="layout.json; not needed with --machine venue_go")
+    ap.add_argument("--machine", default="", help="venue_go: read depth from the ruler, focus from the marker, preset from the header")
     ap.add_argument("--control", required=True, choices=["gain", "depth", "tgc", "focus", "preset"])
     ap.add_argument("--unit", required=True, help='e.g. "%", "cm", "dB", "slider steps"')
     ap.add_argument("--levels", required=True, help="comma list, in the order you will set them")
@@ -40,7 +41,13 @@ def main() -> None:
     ap.add_argument("--tesseract", default=os.environ.get("TESSERACT_CMD"))
     a = ap.parse_args()
 
-    layout = ScreenLayout.load(a.layout)
+    if a.machine == "venue_go":
+        from usbench import venue_go
+        layout = venue_go.layout()
+    else:
+        if not a.layout:
+            sys.exit("--layout is required unless --machine venue_go")
+        layout = ScreenLayout.load(a.layout)
     src = FrameSource(int(a.source) if a.source.isdigit() else a.source)
     mp = os.path.join(a.out, "manifest.csv")
     new_file = not os.path.exists(mp)
@@ -57,14 +64,24 @@ def main() -> None:
             os.makedirs(d, exist_ok=True)
             for _ in range(5):  # flush stale frames in the capture buffer
                 src.read()
-            ocr = {"ocr_gain": "", "ocr_depth": "", "ocr_freq": "", "ocr_preset": ""}
+            ocr = {"ocr_gain": "", "ocr_depth": "", "ocr_freq": "", "ocr_preset": "",
+                   "screen_focus_cm": "", "screen_probe": "", "screen_ao_pct": ""}
             for i in range(a.frames):
                 frame = src.read()
                 if frame is None:
                     sys.exit("capture stopped")
                 p = os.path.join(d, f"{a.session}_{i:03d}.png")
                 cv2.imwrite(p, frame)
-                if i == 0 and not a.no_ocr:
+                if i == 0 and not a.no_ocr and a.machine == "venue_go":
+                    sc = venue_go.read_screen(frame)
+                    ocr = {"ocr_gain": "", "ocr_depth": sc.get("depth_cm"), "ocr_freq": "",
+                           "ocr_preset": sc.get("preset"), "screen_focus_cm": sc.get("focus_cm"),
+                           "screen_probe": sc.get("probe"), "screen_ao_pct": sc.get("ao_pct")}
+                    print(f"  screen reads depth={sc.get('depth_cm')} cm focus={sc.get('focus_cm')} cm "
+                          f"{sc.get('probe')} {sc.get('preset')} AO={sc.get('ao_pct')}%")
+                    if a.control == "depth" and sc.get("depth_cm") is not None and abs(sc["depth_cm"] - lv) > 0.3:
+                        print(f"  WARNING: you labelled depth {lv:g} but the ruler says {sc['depth_cm']}")
+                elif i == 0 and not a.no_ocr:
                     try:
                         from usbench.ocr import read_strip
                         s = read_strip(layout.crop_strip(frame), a.tesseract)
