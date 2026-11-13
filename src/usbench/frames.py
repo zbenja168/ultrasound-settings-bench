@@ -22,13 +22,30 @@ class FrameSource:
         self._cap: cv2.VideoCapture | None = None
         self._paths: list[str] = []
         if isinstance(source, int) or (isinstance(source, str) and source.isdigit()):
-            self._cap = cv2.VideoCapture(int(source), cv2.CAP_DSHOW if os.name == "nt" else 0)
-            if width:
-                self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            if height:
-                self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            if not self._cap.isOpened():
-                raise RuntimeError(f"could not open capture device {source}")
+            # Same order that works for the Cam Link on the Venue Go in the coverage project:
+            # Media Foundation first, then DirectShow, then default; always ask for 1920x1080.
+            width, height = width or 1920, height or 1080
+            backends = [("MSMF", cv2.CAP_MSMF), ("DSHOW", cv2.CAP_DSHOW), ("default", cv2.CAP_ANY)]                 if os.name == "nt" else [("default", cv2.CAP_ANY)]
+            for name, be in backends:
+                cap = cv2.VideoCapture(int(source), be)
+                if not cap.isOpened():
+                    cap.release()
+                    continue
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                ok, frame = cap.read()
+                if ok:
+                    self._cap = cap
+                    got = frame.shape[1::-1]
+                    print(f"opened capture {source} via {name} at {got[0]}x{got[1]}")
+                    if got != (width, height):
+                        print(f"WARNING: asked for {width}x{height}, got {got[0]}x{got[1]}. The Venue Go "
+                              "reader assumes 1920x1080; check the capture card and cable.")
+                    break
+                cap.release()
+            if self._cap is None:
+                raise RuntimeError(f"could not open capture device {source} with any backend; "
+                                   "try another index (0, 1, 2)")
         elif os.path.isdir(source):
             self._paths = sorted(
                 p for p in glob.glob(os.path.join(source, "*")) if p.lower().endswith(IMAGE_EXTS)
