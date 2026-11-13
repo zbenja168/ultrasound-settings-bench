@@ -13,7 +13,9 @@ import io
 import os
 import sys
 
-import cv2
+os.environ["OPENCV_LOG_LEVEL"] = "OFF"  # must be set before cv2 loads; probing empty indices is noisy
+os.environ["OPENCV_VIDEOIO_PRIORITY_OBSENSOR"] = "0"
+import cv2  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from usbench.frames import FrameSource  # noqa: E402
@@ -24,7 +26,6 @@ def main() -> None:
     ap.add_argument("--max", type=int, default=5)
     ap.add_argument("--save", action="store_true")
     a = ap.parse_args()
-    os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
     found = 0
     for i in range(a.max):
         try:
