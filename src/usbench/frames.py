@@ -90,3 +90,14 @@ def to_gray(frame: np.ndarray) -> np.ndarray:
     if frame.ndim == 2:
         return frame
     return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+
+def show(name: str, img: np.ndarray, max_w: int = 1100) -> None:
+    """imshow in a resizable window scaled to fit a laptop screen. A 1920x1080 frame at native
+    size is wider than most laptop displays, so only its top-left corner would be visible.
+    Mouse callbacks on a WINDOW_NORMAL window still report image coordinates."""
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    h, w = img.shape[:2]
+    if w > max_w:
+        cv2.resizeWindow(name, max_w, int(h * max_w / w))
+    cv2.imshow(name, img)

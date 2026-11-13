@@ -18,7 +18,7 @@ import time
 import cv2
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from usbench.frames import FrameSource  # noqa: E402
+from usbench.frames import FrameSource, show  # noqa: E402
 from usbench.regions import ScreenLayout  # noqa: E402
 
 FIELDS = ["path", "control", "level", "correct", "error", "unit", "session", "ocr_gain", "ocr_depth",
@@ -31,7 +31,7 @@ def main() -> None:
     ap.add_argument("--layout", help="layout.json; not needed with --machine venue_go")
     ap.add_argument("--machine", default="", help="venue_go: read depth from the ruler, focus from the marker, preset from the header")
     ap.add_argument("--control", required=True, choices=["gain", "depth", "tgc", "focus", "preset"])
-    ap.add_argument("--unit", required=True, help='e.g. "%", "cm", "dB", "slider steps"')
+    ap.add_argument("--unit", required=True, help='e.g. "%%", "cm", "dB", "slider steps"')
     ap.add_argument("--levels", required=True, help="comma list, in the order you will set them")
     ap.add_argument("--correct", type=float, required=True)
     ap.add_argument("--frames", type=int, default=120)
@@ -94,7 +94,7 @@ def main() -> None:
                 w.writerow({"path": os.path.relpath(p, a.out).replace("\\", "/"), "control": a.control,
                             "level": lv, "correct": int(lv == a.correct), "error": abs(lv - a.correct),
                             "unit": a.unit, "session": a.session, **ocr})
-                cv2.imshow("recording (q aborts)", frame)
+                show("recording (q aborts)", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     sys.exit("aborted")
             f.flush()

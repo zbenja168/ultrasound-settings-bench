@@ -19,7 +19,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from usbench.features import compute_features  # noqa: E402
-from usbench.frames import FrameSource, to_gray  # noqa: E402
+from usbench.frames import FrameSource, show, to_gray  # noqa: E402
 from usbench.mask import load_mask  # noqa: E402
 from usbench.regions import ScreenLayout  # noqa: E402
 
@@ -103,7 +103,7 @@ def main() -> None:
             row += 28
         cv2.putText(panel, ocr_text or "q quit, s snapshot", (8, row), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (200, 200, 0), 1, cv2.LINE_AA)
-        cv2.imshow("usbench live", view)
+        show("usbench live", view)
         cv2.imshow("detectors", panel)
         k = cv2.waitKey(1) & 0xFF
         if k == ord("q"):

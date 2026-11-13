@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from usbench.frames import FrameSource  # noqa: E402
+from usbench.frames import FrameSource, show  # noqa: E402
 from usbench.venue_go import C1_5, IMAGE_RECT, click_to_cm, fit_sector, read_screen, valid_mask  # noqa: E402
 
 
@@ -68,9 +68,8 @@ def main() -> None:
             if ev == cv2.EVENT_LBUTTONDOWN:
                 click.append((y, x))
 
-        cv2.namedWindow("click the CENTRE of the target cyst, then press any key")
+        show("click the CENTRE of the target cyst, then press any key", view)
         cv2.setMouseCallback("click the CENTRE of the target cyst, then press any key", on_mouse)
-        cv2.imshow("click the CENTRE of the target cyst, then press any key", view)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         if click:
