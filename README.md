@@ -39,7 +39,16 @@ they only see the image area. The benchmark asks whether the image alone gives t
 | `scripts/make_synthetic.py`, `scripts/run_benchmark.py` | build the synthetic set, score any manifest |
 | `docs/LAB_DAY.md` | the phantom afternoon, step by step |
 
-## Setup
+## Setup on a new Windows laptop
+
+Download the repo (GitHub, green Code button, Download ZIP, then unzip) or `git clone`, then in that folder:
+
+```
+powershell -ExecutionPolicy Bypass -File setup.ps1
+```
+
+It installs Python 3.12 and Tesseract if missing, builds `.venv`, runs the tests, and lists capture
+devices (plug the Cam Link in first). Manual steps, if you prefer:
 
 ```
 python -m venv .venv
