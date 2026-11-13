@@ -5,14 +5,17 @@ knob moved at a time, every other knob at its correct value, at least 100 frames
 
 ## Machine: GE Venue Go (software Vers 305, Revision 65.0, built 2026-01-07)
 
-The Venue Go is touch-only: no knobs, no physical slider bank. That changes four things.
+The Venue Go is touch-only: no knobs, no physical slider bank. That changes a few things.
 
 - **Levels are touch steps.** Gain and depth change by swiping over the grey bar or depth scale, or by tapping the control and using + / -. Use + / - only, never swipes, so every level is a whole number of steps and repeatable. Record the number the screen shows; if a control shows no number, record the count of taps from correct and use `--unit steps`.
 - **Auto Optimize must be off for every sweep.** On GE point-of-care machines Auto Optimize can set TGC automatically, and manual changes can switch it off without warning. Check it is off before each sweep and again before the correct-level repeat at the end.
 - **TGC is on-screen sliders that time out.** On related GE handhelds the TGC sliders disappear after a few seconds and the Gain control is disabled while they are open. So the TGC curve may not be visible in the recorded frames: label TGC levels from what you set, photograph the slider positions at each level, and wait for the sliders to close before pressing Enter so they are not in the frames.
 - **The settings are on the touch controls, not one strip.** The HDMI output mirrors the whole screen, including the control panel. If the values sit on several buttons, drag the strip rectangle around all of them; Tesseract reads the block as one page. If OCR misses a value, send a screenshot and the regex gets a line.
 
-Before the day: confirm the HDMI port works by plugging in any monitor, and check the system setup for a video-output option. Confirm whether Focus is a touch control on this software version; if it is automatic, the focus sweep is dropped and recorded as not adjustable.
+- **Stay out of Full-screen mode.** The Venue Go has a full-screen mode that enlarges the image and simplifies the interface, which can hide the control values the OCR reads. Record in the normal layout, and pick the regions in that same layout.
+- **Do not use the button probe's controls during a sweep.** The probe has buttons that can drive the system; pressing them moves the probe. Change settings on the screen only.
+
+HDMI capture from this machine is confirmed: it has worked with a capture card on another project. Focus is still to be checked on the machine; if it is automatic, the focus sweep is dropped and recorded as not adjustable.
 
 ## Bring
 
